@@ -1,0 +1,3 @@
+# Runtime libraries. Grows day by day as features are added.
+requests>=2.31
+pyyaml>=6.0
