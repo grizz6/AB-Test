@@ -65,13 +65,42 @@ def test_chat_sends_expected_request(monkeypatch):
     assert seen["json"]["contents"][0]["parts"][0]["text"] == "Say hi"
 
 
-def test_error_status_raises(monkeypatch):
+def test_error_status_raises_after_retries(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.setattr(
-        llm.requests, "post", lambda *a, **k: FakeResponse(429, text="quota exceeded")
-    )
+    calls = []
+
+    def fake_post(*a, **k):
+        calls.append(1)
+        return FakeResponse(429, text="quota exceeded")
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    sleeps = []
     with pytest.raises(llm.LLMError, match="429"):
-        llm.chat([{"role": "user", "content": "hi"}], CFG)
+        llm.chat([{"role": "user", "content": "hi"}], CFG, sleep=sleeps.append)
+    assert len(calls) == llm.MAX_RETRIES + 1
+    assert sleeps == [2, 4, 8]
+
+
+def test_overloaded_then_success(monkeypatch):
+    # Seen in CI: 503 "model is currently experiencing high demand".
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    responses = [FakeResponse(503, text="high demand"), FakeResponse(200, _reply("hi"))]
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: responses.pop(0))
+    assert llm.chat([{"role": "user", "content": "hi"}], CFG, sleep=lambda s: None) == "hi"
+
+
+def test_client_errors_are_not_retried(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    calls = []
+
+    def fake_post(*a, **k):
+        calls.append(1)
+        return FakeResponse(404, text="model not found")
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    with pytest.raises(llm.LLMError, match="404"):
+        llm.chat([{"role": "user", "content": "hi"}], CFG, sleep=lambda s: None)
+    assert len(calls) == 1
 
 
 def test_non_json_200_raises_clear_error(monkeypatch):

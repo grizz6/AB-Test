@@ -122,9 +122,15 @@ def latest_10k(submissions: dict, ticker: str, company: str, cik: str) -> Filing
     raise DownloadError(f"No 10-K found in recent filings for {ticker} (CIK {cik}).")
 
 
-def download_all(companies: dict[str, str], client: SecClient, out_dir: Path = RAW_DIR):
+def download_all(
+    companies: dict[str, str],
+    client: SecClient,
+    out_dir: Path = RAW_DIR,
+    cik_overrides: dict[str, int | str] | None = None,
+):
     out_dir.mkdir(parents=True, exist_ok=True)
     ciks = cik_lookup(client)
+    ciks.update({t.upper(): pad_cik(c) for t, c in (cik_overrides or {}).items()})
     filings = []
     for ticker, company in companies.items():
         cik = ciks.get(ticker.upper())
@@ -147,7 +153,10 @@ def download_all(companies: dict[str, str], client: SecClient, out_dir: Path = R
 def main() -> None:
     try:
         client = SecClient(user_agent())
-        filings = download_all(load_config()["companies"], client)
+        cfg = load_config()
+        filings = download_all(
+            cfg["companies"], client, cik_overrides=cfg.get("cik_overrides") or {}
+        )
     except DownloadError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)

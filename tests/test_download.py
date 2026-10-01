@@ -127,6 +127,46 @@ def test_download_all_writes_files_and_manifest(tmp_path, monkeypatch):
     assert filings[0].cik == "0000320193"
 
 
+def test_cik_override_replaces_ticker_lookup(tmp_path, monkeypatch):
+    monkeypatch.setattr(download, "ROOT", tmp_path)
+    # SEC's ticker list points XOM at a new CIK with no 10-K; the override wins.
+    tickers = {"0": {"cik_str": 2115436, "ticker": "XOM", "title": "ExxonMobil Holdings"}}
+    subs = {
+        "filings": {
+            "recent": {
+                "form": ["10-K"],
+                "accessionNumber": ["0000034088-26-000010"],
+                "filingDate": ["2026-02-18"],
+                "reportDate": ["2025-12-31"],
+                "primaryDocument": ["xom-20251231.htm"],
+            }
+        }
+    }
+    doc_url = "https://www.sec.gov/Archives/edgar/data/34088/000003408826000010/xom-20251231.htm"
+    session = FakeSession(
+        {
+            download.TICKERS_URL: [FakeResponse(payload=tickers)],
+            download.SUBMISSIONS_URL.format(cik="0000034088"): [FakeResponse(payload=subs)],
+            doc_url: [FakeResponse(content=b"<html></html>")],
+        }
+    )
+    client = download.SecClient("Jane jane@example.com", session=session, sleep=lambda s: None)
+    filings = download.download_all(
+        {"XOM": "Exxon Mobil"}, client, out_dir=tmp_path / "raw", cik_overrides={"XOM": 34088}
+    )
+    assert filings[0].cik == "0000034088"
+    assert filings[0].url == doc_url
+
+
+def test_config_overrides_are_valid():
+    from src.config import load_config
+
+    cfg = load_config()
+    for ticker, cik in (cfg.get("cik_overrides") or {}).items():
+        assert ticker in cfg["companies"]
+        assert download.pad_cik(cik).isdigit()
+
+
 def test_unknown_ticker_raises(tmp_path):
     session = FakeSession({download.TICKERS_URL: [FakeResponse(payload={})]})
     client = download.SecClient("Jane jane@example.com", session=session, sleep=lambda s: None)
