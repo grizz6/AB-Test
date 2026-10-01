@@ -33,7 +33,8 @@ def test_chat_sends_expected_request(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     seen = {}
 
-    def fake_post(url, headers, json, timeout):
+    def fake_post(url, headers, json, timeout, allow_redirects):
+        assert allow_redirects is False
         seen.update(url=url, headers=headers, json=json)
         return FakeResponse(200, {"choices": [{"message": {"content": " hi \n"}}]})
 
@@ -68,4 +69,14 @@ def test_200_without_choices_raises_clear_error(monkeypatch):
         llm.requests, "post", lambda *a, **k: FakeResponse(200, {"error": "nope"}, text="{}")
     )
     with pytest.raises(llm.LLMError, match="unexpected response"):
+        llm.chat([{"role": "user", "content": "hi"}], CFG)
+
+
+def test_redirect_raises_with_location(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    resp = FakeResponse(301, None, text="")
+    resp.headers["Location"] = "https://new.example.test/inference/chat/completions"
+
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: resp)
+    with pytest.raises(llm.LLMError, match="new.example.test"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
