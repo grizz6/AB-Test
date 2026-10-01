@@ -7,14 +7,14 @@ A retrieval-augmented generation (RAG) system built as an MLOps project: tracked
 an evaluation test set, CI that blocks changes when retrieval quality drops, a containerized
 app, and monitoring. Runs entirely on free cloud services, with no credit card and no local LLM.
 
-> **Status:** Day 1 of 10 (setup). See the roadmap below.
+> **Status:** Day 2 of 10 (download filings). See the roadmap below.
 
 ## Cloud stack (all free tiers)
 
 | Piece | Service |
 |---|---|
 | Code, CI, eval gate, container registry | GitHub, GitHub Actions, GHCR |
-| LLM | Google Gemini API, free tier (`gemini-2.5-flash`) |
+| LLM | Google Gemini API, free tier (`gemini-3.8-flash`) |
 | Vector store + question log | Supabase Postgres with pgvector |
 | App hosting (API, UI, dashboard) | Hugging Face Spaces |
 | Data source | SEC EDGAR (public, no key) |
@@ -39,14 +39,15 @@ pip install -r requirements-dev.txt
 cp .env.example .env        # fill in values; never commit .env
 ruff check . && pytest -q
 python -m src.llm "Say hi"   # needs GEMINI_API_KEY in .env
+python -m src.download       # needs SEC_USER_AGENT in .env; writes data/raw/
 ```
 
 ## Roadmap
 
 | Day | What | Status |
 |---|---|---|
-| 1 | Setup, CI (ruff, pytest, gitleaks), LLM smoke test | in progress |
-| 2 | Download 10 filings from SEC EDGAR | |
+| 1 | Setup, CI (ruff, pytest, gitleaks), LLM smoke test | done |
+| 2 | Download 10 filings from SEC EDGAR (`src/download.py`, pipeline workflow) | in progress |
 | 3 | Parse "Item 1A. Risk Factors" + chunk + tests | |
 | 4 | Embed + store in Supabase pgvector | |
 | 5 | Retrieve + answer with citations (v1.0) | |

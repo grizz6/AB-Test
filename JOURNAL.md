@@ -11,3 +11,15 @@
 - CI: ruff (lint + format), pytest, gitleaks secret scan on full history, and an LLM
   smoke test ("say hi").
 - All settings in `config.yaml` so later experiments change config, not code.
+
+## Day 2: Download filings
+
+- `src/download.py`: ticker -> CIK from `company_tickers.json`, latest original 10-K from
+  `data.sec.gov/submissions` (skips 10-K/A amendments), HTML saved to `data/raw/`, plus a
+  `manifest.json` with each file's source URL and accession number for citations later.
+- SEC rules: `User-Agent` from the `SEC_USER_AGENT` secret, requests spaced >= 0.2 s apart,
+  retries with backoff on 429/5xx only.
+- Runs in the cloud: `.github/workflows/pipeline.yml` downloads the filings in GitHub Actions
+  and keeps them as the `raw-filings` artifact (data never goes into git).
+- Gemini `gemini-2.5-flash` is closed to new users; pinned `gemini-3.8-flash` (pinned, not the
+  `-latest` alias, so evaluation runs stay comparable).
