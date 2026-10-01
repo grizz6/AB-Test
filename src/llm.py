@@ -54,12 +54,20 @@ def chat(messages: list[dict[str, str]], llm_cfg: dict | None = None) -> str:
     """Send chat messages and return the reply text."""
     llm_cfg = llm_cfg or load_config()["llm"]
     url = f"{llm_cfg['endpoint'].rstrip('/')}/chat/completions"
+    # Don't follow redirects: requests turns a redirected POST into a GET, which hides
+    # the real error behind whatever page the redirect lands on.
     resp = requests.post(
         url,
         headers=_headers(_token()),
         json=build_payload(messages, llm_cfg),
         timeout=TIMEOUT_SECONDS,
+        allow_redirects=False,
     )
+    if 300 <= resp.status_code < 400:
+        raise LLMError(
+            f"GitHub Models redirected ({resp.status_code}) {url} -> "
+            f"{resp.headers.get('Location')!r}; update llm.endpoint in config.yaml"
+        )
     if resp.status_code != 200:
         raise LLMError(f"GitHub Models returned {resp.status_code}: {resp.text[:500]}")
     try:
@@ -82,7 +90,10 @@ def list_models() -> list[str]:
         "https://models.github.ai/catalog/models",
         headers=_headers(_token()),
         timeout=TIMEOUT_SECONDS,
+        allow_redirects=False,
     )
+    if 300 <= resp.status_code < 400:
+        raise LLMError(f"Model catalog redirected to {resp.headers.get('Location')!r}")
     resp.raise_for_status()
     return sorted(m["id"] for m in resp.json())
 
@@ -90,7 +101,7 @@ def list_models() -> list[str]:
 def _print_available_models() -> None:
     try:
         print("Available models:", ", ".join(list_models()), file=sys.stderr)
-    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+    except (LLMError, requests.RequestException, ValueError, KeyError, TypeError) as exc:
         print(f"Could not list models: {exc}", file=sys.stderr)
 
 
