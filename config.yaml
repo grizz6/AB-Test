@@ -21,8 +21,8 @@ retrieval:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
 
 llm:
-  provider: github_models
-  endpoint: https://models.github.ai/inference
-  model: openai/gpt-4.1-mini
+  provider: gemini
+  endpoint: https://generativelanguage.googleapis.com/v1beta
+  model: gemini-2.5-flash
   temperature: 0.0
-  max_tokens: 500
+  max_tokens: 2048  # leave room: some Gemini models spend output tokens on thinking

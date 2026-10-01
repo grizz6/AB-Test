@@ -14,7 +14,7 @@ app, and monitoring. Runs entirely on free cloud services, with no credit card a
 | Piece | Service |
 |---|---|
 | Code, CI, eval gate, container registry | GitHub, GitHub Actions, GHCR |
-| LLM | GitHub Models (called with the built-in Actions token) |
+| LLM | Google Gemini API, free tier (`gemini-2.5-flash`) |
 | Vector store + question log | Supabase Postgres with pgvector |
 | App hosting (API, UI, dashboard) | Hugging Face Spaces |
 | Data source | SEC EDGAR (public, no key) |
@@ -26,11 +26,10 @@ Secrets live in **repo Settings → Secrets and variables → Actions**:
 
 | Secret | Used for | Needed from |
 |---|---|---|
+| `GEMINI_API_KEY` | LLM calls (Google AI Studio key) | Day 1 |
 | `SEC_USER_AGENT` | SEC requires `Name email` on every request | Day 2 |
 | `SUPABASE_DB_URL` | Postgres connection string | Day 4 |
 | `HF_TOKEN` | Deploying to Hugging Face Spaces | Day 9 |
-
-The LLM needs no secret in CI: the workflow grants `models: read` to the built-in token.
 
 ## Run locally
 
@@ -39,7 +38,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env        # fill in values; never commit .env
 ruff check . && pytest -q
-python -m src.llm "Say hi"   # needs GITHUB_TOKEN with the Models permission
+python -m src.llm "Say hi"   # needs GEMINI_API_KEY in .env
 ```
 
 ## Roadmap

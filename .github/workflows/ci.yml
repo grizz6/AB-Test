@@ -42,11 +42,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   llm-smoke:
-    # Proves the hosted LLM is reachable. Uses the built-in Actions token, no API key.
+    # Proves the hosted LLM is reachable. The key comes from the GEMINI_API_KEY repo secret.
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      models: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -55,7 +52,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements.txt
-      - name: Ask GitHub Models to say hi
+      - name: Ask Gemini to say hi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -m src.llm "Say hi in one short sentence."
