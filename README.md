@@ -1,50 +1,57 @@
-# AB-Test: A/B testing and uplift modeling on Criteo ad data
+# Filings Q&A
 
-Did an online ad campaign actually cause more purchases, can we trust the
-experiment, and *who* did the ad change? This project answers those questions
-on the [Criteo Uplift dataset](data/README.md) (~14M users from a randomized ad
-experiment), and packages the methods as a reusable Python library, `abkit`.
+Ask questions about the **Risk Factors** section of 10 companies' annual reports (10-K
+filings) and get answers with citations, e.g. *"What does Tesla say about supply chain risk?"*
 
-> **Status:** Steps 0–1 (setup and data exploration) are done. The results so far
-> come from a **synthetic stand-in** dataset because the real download is pending.
-> See [data/README.md](data/README.md).
+A retrieval-augmented generation (RAG) system built as an MLOps project: tracked experiments,
+an evaluation test set, CI that blocks changes when retrieval quality drops, a containerized
+app, and monitoring. Runs entirely on free cloud services, with no credit card and no local LLM.
 
-## Quick start
+> **Status:** Day 1 of 10 (setup). See the roadmap below.
+
+## Cloud stack (all free tiers)
+
+| Piece | Service |
+|---|---|
+| Code, CI, eval gate, container registry | GitHub, GitHub Actions, GHCR |
+| LLM | Google Gemini API, free tier (`gemini-2.5-flash`) |
+| Vector store + question log | Supabase Postgres with pgvector |
+| App hosting (API, UI, dashboard) | Hugging Face Spaces |
+| Data source | SEC EDGAR (public, no key) |
+
+## Secrets
+
+No secret is ever committed. `.env` is git-ignored and CI scans every push with gitleaks.
+Secrets live in **repo Settings → Secrets and variables → Actions**:
+
+| Secret | Used for | Needed from |
+|---|---|---|
+| `GEMINI_API_KEY` | LLM calls (Google AI Studio key) | Day 1 |
+| `SEC_USER_AGENT` | SEC requires `Name email` on every request | Day 2 |
+| `SUPABASE_DB_URL` | Postgres connection string | Day 4 |
+| `HF_TOKEN` | Deploying to Hugging Face Spaces | Day 9 |
+
+## Run locally
 
 ```bash
-pip install -e ".[dev]"
-python scripts/download_criteo.py    # real data (~300 MB download), or:
-python scripts/make_synthetic.py     # fake stand-in with the same columns
-pytest
-jupyter notebook notebooks/01_eda.ipynb
-```
-
-## Layout
-
-```
-data/README.md        where the data comes from (citation, license, columns)
-scripts/              download the real data / generate fake data
-sql/                  DuckDB queries for data exploration (table name: criteo)
-notebooks/            analysis notebooks, one per step
-src/abkit/            reusable library code
-tests/                pytest suite
-reports/              decision memo (later)
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env        # fill in values; never commit .env
+ruff check . && pytest -q
+python -m src.llm "Say hi"   # needs GEMINI_API_KEY in .env
 ```
 
 ## Roadmap
 
-| Step | Question | Status |
+| Day | What | Status |
 |---|---|---|
-| 0 | Are the tools and data ready? | done (synthetic data until the real file is downloaded) |
-| 1 | What does the data look like? | done: `sql/01–04`, `notebooks/01_eda.ipynb` |
-| 2 | Can we trust this test? (SRM, balance, exposure) | |
-| 3 | Did the ad work? (lift, CIs, power, multiple testing) | |
-| 4 | Can we make the answer sharper? (regression adjustment / CUPAC) | |
-| 5 | Who did the ad change? (ITT vs. IV, uplift models, Qini) | |
-| 6 | Reusable package and tests | |
-| 7 | Decision memo | |
-
-## Data credit
-
-Diemert, Betlei, Renaudin, Amini. "A Large Scale Benchmark for Uplift Modeling."
-AdKDD & TargetAd Workshop, KDD 2018. Licensed CC BY-NC-SA 4.0.
+| 1 | Setup, CI (ruff, pytest, gitleaks), LLM smoke test | in progress |
+| 2 | Download 10 filings from SEC EDGAR | |
+| 3 | Parse "Item 1A. Risk Factors" + chunk + tests | |
+| 4 | Embed + store in Supabase pgvector | |
+| 5 | Retrieve + answer with citations (v1.0) | |
+| 6 | 50-question test set | |
+| 7 | Evaluation + MLflow experiments | |
+| 8 | CI eval gate (blocks quality drops) | |
+| 9 | FastAPI + Streamlit + Docker, deployed to Spaces | |
+| 10 | Monitoring dashboard + README + demo | |

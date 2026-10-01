@@ -1,0 +1,28 @@
+# All tunable settings live here so experiments change config, not code.
+
+companies:  # ticker -> name (Day 2 downloads the latest 10-K for each)
+  AAPL: Apple
+  MSFT: Microsoft
+  TSLA: Tesla
+  JPM: JPMorgan Chase
+  WMT: Walmart
+  PFE: Pfizer
+  XOM: Exxon Mobil
+  NKE: Nike
+  NFLX: Netflix
+  DAL: Delta Air Lines
+
+chunking:
+  size_words: 400
+  overlap_words: 50
+
+retrieval:
+  top_k: 5
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+
+llm:
+  provider: gemini
+  endpoint: https://generativelanguage.googleapis.com/v1beta
+  model: gemini-2.5-flash
+  temperature: 0.0
+  max_tokens: 2048  # leave room: some Gemini models spend output tokens on thinking
