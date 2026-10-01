@@ -62,7 +62,18 @@ def chat(messages: list[dict[str, str]], llm_cfg: dict | None = None) -> str:
     )
     if resp.status_code != 200:
         raise LLMError(f"GitHub Models returned {resp.status_code}: {resp.text[:500]}")
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise LLMError(
+            f"GitHub Models returned 200 but the body is not valid JSON "
+            f"(Content-Type: {resp.headers.get('Content-Type')!r}, "
+            f"body: {resp.text[:500]!r})"
+        ) from exc
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(f"GitHub Models returned an unexpected response: {str(data)[:500]}") from exc
 
 
 def list_models() -> list[str]:
@@ -76,16 +87,20 @@ def list_models() -> list[str]:
     return sorted(m["id"] for m in resp.json())
 
 
+def _print_available_models() -> None:
+    try:
+        print("Available models:", ", ".join(list_models()), file=sys.stderr)
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        print(f"Could not list models: {exc}", file=sys.stderr)
+
+
 def main() -> None:
     prompt = " ".join(sys.argv[1:]) or "Say hi"
     try:
         print(chat([{"role": "user", "content": prompt}]))
     except LLMError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        try:
-            print("Available models:", ", ".join(list_models()), file=sys.stderr)
-        except requests.RequestException:
-            pass
+        _print_available_models()
         sys.exit(1)
 
 

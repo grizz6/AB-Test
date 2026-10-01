@@ -15,8 +15,11 @@ class FakeResponse:
         self.status_code = status_code
         self._payload = payload
         self.text = text
+        self.headers = {"Content-Type": "application/json"}
 
     def json(self):
+        if self._payload is None:  # same as requests on an empty or non-JSON body
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
         return self._payload
 
 
@@ -48,4 +51,21 @@ def test_chat_error_status_raises(monkeypatch):
         llm.requests, "post", lambda *a, **k: FakeResponse(429, text="rate limited")
     )
     with pytest.raises(llm.LLMError, match="429"):
+        llm.chat([{"role": "user", "content": "hi"}], CFG)
+
+
+def test_empty_200_body_raises_clear_error(monkeypatch):
+    # Seen in CI: HTTP 200 with an empty body. Must fail with a readable message.
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: FakeResponse(200, None, text=""))
+    with pytest.raises(llm.LLMError, match="not valid JSON"):
+        llm.chat([{"role": "user", "content": "hi"}], CFG)
+
+
+def test_200_without_choices_raises_clear_error(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setattr(
+        llm.requests, "post", lambda *a, **k: FakeResponse(200, {"error": "nope"}, text="{}")
+    )
+    with pytest.raises(llm.LLMError, match="unexpected response"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
