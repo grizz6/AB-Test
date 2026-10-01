@@ -3,8 +3,8 @@ import pytest
 from src import llm
 
 CFG = {
-    "endpoint": "https://example.test/inference",
-    "model": "some/model",
+    "endpoint": "https://example.test/v1beta",
+    "model": "some-model",
     "temperature": 0.0,
     "max_tokens": 50,
 }
@@ -23,48 +23,67 @@ class FakeResponse:
         return self._payload
 
 
-def test_missing_token_raises(monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    with pytest.raises(llm.LLMError, match="GITHUB_TOKEN"):
+def _reply(text, finish="STOP"):
+    return {"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": finish}]}
+
+
+def test_missing_key_raises(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(llm.LLMError, match="GEMINI_API_KEY"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
 
 
+def test_payload_maps_roles():
+    payload = llm.build_payload(
+        [
+            {"role": "system", "content": "Be brief."},
+            {"role": "user", "content": "Q1"},
+            {"role": "assistant", "content": "A1"},
+            {"role": "user", "content": "Q2"},
+        ],
+        CFG,
+    )
+    assert payload["systemInstruction"] == {"parts": [{"text": "Be brief."}]}
+    assert [c["role"] for c in payload["contents"]] == ["user", "model", "user"]
+    assert payload["contents"][2]["parts"][0]["text"] == "Q2"
+    assert payload["generationConfig"] == {"temperature": 0.0, "maxOutputTokens": 50}
+
+
 def test_chat_sends_expected_request(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     seen = {}
 
     def fake_post(url, headers, json, timeout, allow_redirects):
         assert allow_redirects is False
         seen.update(url=url, headers=headers, json=json)
-        return FakeResponse(200, {"choices": [{"message": {"content": " hi \n"}}]})
+        return FakeResponse(200, _reply(" hi \n"))
 
     monkeypatch.setattr(llm.requests, "post", fake_post)
     assert llm.chat([{"role": "user", "content": "Say hi"}], CFG) == "hi"
-    assert seen["url"] == "https://example.test/inference/chat/completions"
-    assert seen["headers"]["Authorization"] == "Bearer test-token"
-    assert seen["json"]["model"] == "some/model"
-    assert seen["json"]["messages"][0]["content"] == "Say hi"
+    assert seen["url"] == "https://example.test/v1beta/models/some-model:generateContent"
+    assert seen["headers"]["x-goog-api-key"] == "test-key"
+    assert seen["json"]["contents"][0]["parts"][0]["text"] == "Say hi"
 
 
-def test_chat_error_status_raises(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+def test_error_status_raises(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
-        llm.requests, "post", lambda *a, **k: FakeResponse(429, text="rate limited")
+        llm.requests, "post", lambda *a, **k: FakeResponse(429, text="quota exceeded")
     )
     with pytest.raises(llm.LLMError, match="429"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
 
 
-def test_empty_200_body_raises_clear_error(monkeypatch):
-    # Seen in CI: HTTP 200 with an empty body. Must fail with a readable message.
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: FakeResponse(200, None, text=""))
+def test_non_json_200_raises_clear_error(monkeypatch):
+    # Seen with the retired GitHub Models endpoint: HTTP 200 with a plain-text body.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: FakeResponse(200, None, text="OK"))
     with pytest.raises(llm.LLMError, match="not valid JSON"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
 
 
-def test_200_without_choices_raises_clear_error(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+def test_unexpected_shape_raises_clear_error(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
         llm.requests, "post", lambda *a, **k: FakeResponse(200, {"error": "nope"}, text="{}")
     )
@@ -72,11 +91,11 @@ def test_200_without_choices_raises_clear_error(monkeypatch):
         llm.chat([{"role": "user", "content": "hi"}], CFG)
 
 
-def test_redirect_raises_with_location(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-    resp = FakeResponse(301, None, text="")
-    resp.headers["Location"] = "https://new.example.test/inference/chat/completions"
-
-    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: resp)
-    with pytest.raises(llm.LLMError, match="new.example.test"):
+def test_empty_text_reports_finish_reason(monkeypatch):
+    # e.g. the output-token budget ran out before any visible text was produced.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        llm.requests, "post", lambda *a, **k: FakeResponse(200, _reply("", "MAX_TOKENS"))
+    )
+    with pytest.raises(llm.LLMError, match="MAX_TOKENS"):
         llm.chat([{"role": "user", "content": "hi"}], CFG)

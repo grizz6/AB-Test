@@ -13,6 +13,6 @@ def test_chunk_overlap_smaller_than_chunk():
 
 def test_llm_settings_present():
     llm = load_config()["llm"]
-    assert llm["provider"] == "github_models"
+    assert llm["provider"] == "gemini"
     assert llm["endpoint"].startswith("https://")
     assert llm["model"]
