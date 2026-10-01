@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 import requests
 
 from src.config import load_config
 
 TIMEOUT_SECONDS = 60
+RETRY_STATUSES = (429, 500, 503)  # rate limited, or the model is temporarily overloaded
+MAX_RETRIES = 3
 
 
 class LLMError(RuntimeError):
@@ -53,19 +56,28 @@ def build_payload(messages: list[dict[str, str]], llm_cfg: dict) -> dict:
     return payload
 
 
-def chat(messages: list[dict[str, str]], llm_cfg: dict | None = None) -> str:
-    """Send chat messages and return the reply text."""
+def chat(messages: list[dict[str, str]], llm_cfg: dict | None = None, sleep=time.sleep) -> str:
+    """Send chat messages and return the reply text.
+
+    Retries with exponential backoff (2, 4, 8 s) when Gemini is rate limited or overloaded.
+    """
     llm_cfg = llm_cfg or load_config()["llm"]
     url = f"{llm_cfg['endpoint'].rstrip('/')}/models/{llm_cfg['model']}:generateContent"
-    # Don't follow redirects: requests turns a redirected POST into a GET, which hides
-    # the real error behind whatever page the redirect lands on.
-    resp = requests.post(
-        url,
-        headers=_headers(_api_key()),
-        json=build_payload(messages, llm_cfg),
-        timeout=TIMEOUT_SECONDS,
-        allow_redirects=False,
-    )
+    key = _api_key()
+    for attempt in range(MAX_RETRIES + 1):
+        # Don't follow redirects: requests turns a redirected POST into a GET, which hides
+        # the real error behind whatever page the redirect lands on.
+        resp = requests.post(
+            url,
+            headers=_headers(key),
+            json=build_payload(messages, llm_cfg),
+            timeout=TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+        if resp.status_code in RETRY_STATUSES and attempt < MAX_RETRIES:
+            sleep(2 ** (attempt + 1))
+            continue
+        break
     if resp.status_code != 200:
         raise LLMError(f"Gemini returned {resp.status_code}: {resp.text[:500]}")
     try:

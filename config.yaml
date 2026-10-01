@@ -12,6 +12,12 @@ companies:  # ticker -> name (Day 2 downloads the latest 10-K for each)
   NFLX: Netflix
   DAL: Delta Air Lines
 
+# Use a specific SEC CIK instead of the one SEC's ticker list gives.
+# XOM: Exxon redomiciled to a new Texas holding company on 2026-07-01 that took over the
+# ticker (new CIK 2115436) but has not filed a 10-K yet; the 10-Ks are under the old CIK.
+cik_overrides:
+  XOM: 34088
+
 chunking:
   size_words: 400
   overlap_words: 50
@@ -23,6 +29,6 @@ retrieval:
 llm:
   provider: gemini
   endpoint: https://generativelanguage.googleapis.com/v1beta
-  model: gemini-2.5-flash
+  model: gemini-3.8-flash
   temperature: 0.0
   max_tokens: 2048  # leave room: some Gemini models spend output tokens on thinking
