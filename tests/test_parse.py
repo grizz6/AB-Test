@@ -97,3 +97,41 @@ def test_parse_all_flags_suspiciously_short_section(tmp_path, monkeypatch):
     raw, out = _write_filing(tmp_path, monkeypatch, html)
     with pytest.raises(parse.ParseError, match="TSLA: 2 words"):
         parse.parse_all(raw, out)
+
+
+# Leftovers seen in the real filings (Oct 2026 pipeline run): running headers/footers
+# at page breaks, and DAL's heading sitting on the same line as its first sentence.
+@pytest.mark.parametrize(
+    "noise",
+    [
+        "PART I",  # MSFT
+        "Parts I and II",  # JPM
+        "2026 FORM 10-K 23",  # NKE
+        "Delta Air Lines, Inc. | 2025 Form 10-K",  # DAL
+        "Risk Factors",  # repeated running header
+    ],
+)
+def test_page_headers_and_footers_removed(noise):
+    html = f"""<p>Item 1A. Risk Factors</p><p>{RISK_BODY}</p><p>{noise}</p>
+    <p>Fuel prices may rise.</p><p>Item 1B. Unresolved Staff Comments</p>"""
+    lines = parse.extract_risk_factors(html).split("\n")
+    assert noise not in lines
+    assert lines[-1] == "Fuel prices may rise."
+
+
+def test_real_sentences_mentioning_form_10k_are_kept():
+    sentence = (
+        "We describe these risks in more detail elsewhere in this Form 10-K and in our "
+        "other filings with the SEC, and investors should read them carefully."
+    )
+    html = f"<p>Item 1A. Risk Factors</p><p>{sentence}</p><p>Item 2. Properties</p>"
+    assert parse.extract_risk_factors(html) == sentence
+
+
+def test_heading_on_same_line_as_first_sentence_is_stripped():
+    # DAL: a bare "Risk Factors" line earlier, then "ITEM 1A. RISK FACTORS In addition ..."
+    html = f"""<p>Risk Factors</p>
+    <p>ITEM 1A. RISK FACTORS In addition to the other information, consider these.</p>
+    <p>{RISK_BODY}</p><p>ITEM 1B. UNRESOLVED STAFF COMMENTS</p>"""
+    section = parse.extract_risk_factors(html)
+    assert section.startswith("In addition to the other information")

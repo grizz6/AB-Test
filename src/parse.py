@@ -19,9 +19,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import warnings
 from pathlib import Path
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from src.config import ROOT
 
@@ -47,8 +48,24 @@ END_RE = re.compile(
     r"|unresolved[ \t]+staff[ \t]+comments[ \t]*[.:]?[ \t]*)$",
     re.IGNORECASE | re.MULTILINE,
 )
-# Lines that are page furniture, not content.
-NOISE_RE = re.compile(r"^(?:\d{1,3}|page \d{1,3}|table of contents)$", re.IGNORECASE)
+# Lines that are page furniture (page numbers, running headers/footers), not content.
+NOISE_RE = re.compile(
+    r"^(?:\d{1,3}|page \d{1,3}|table of contents"
+    r"|parts? [ivx]+(?: (?:and|&) [ivx]+)?"  # "PART I", "Parts I and II"
+    r"|(?:item 1a\.? ?)?risk factors)$",  # repeated section header
+    re.IGNORECASE,
+)
+FOOTER_MAX_WORDS = 10  # "Delta Air Lines, Inc. | 2025 Form 10-K", "2026 FORM 10-K 23"
+HEADING_PREFIX_RE = re.compile(
+    rf"^item[ \t]*1a[ \t]*[{_DASHES}]?[ \t]*risk[ \t]+factors[ \t]*[{_DASHES}]?[ \t]*",
+    re.IGNORECASE,
+)
+
+
+def is_noise(line: str) -> bool:
+    if NOISE_RE.match(line):
+        return True
+    return "form 10-k" in line.lower() and len(line.split()) <= FOOTER_MAX_WORDS
 
 
 class ParseError(RuntimeError):
@@ -57,7 +74,10 @@ class ParseError(RuntimeError):
 
 def html_to_text(html: str | bytes) -> str:
     """Plain text with one line per block element and normalized whitespace."""
-    soup = BeautifulSoup(html, "lxml")
+    with warnings.catch_warnings():
+        # Some filings are XHTML; the HTML parser handles them fine.
+        warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
+        soup = BeautifulSoup(html, "lxml")
     for tag in soup(["script", "style", "head", "ix:header"]):
         tag.decompose()
     for tag in soup.select('[style*="display:none"], [style*="display: none"]'):
@@ -82,8 +102,11 @@ def find_risk_factors(text: str) -> str:
             best = (start.end(), end)
     if best is None:
         raise ParseError("Could not find an 'Item 1A. Risk Factors' section.")
-    lines = text[best[0] : best[1]].strip().split("\n")
-    return "\n".join(line for line in lines if not NOISE_RE.match(line))
+    lines = [line for line in text[best[0] : best[1]].strip().split("\n") if not is_noise(line)]
+    if lines:
+        # The heading can share a line with the first sentence ("ITEM 1A. RISK FACTORS In ...").
+        lines[0] = HEADING_PREFIX_RE.sub("", lines[0])
+    return "\n".join(line for line in lines if line)
 
 
 def extract_risk_factors(html: str | bytes) -> str:
