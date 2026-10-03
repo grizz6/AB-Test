@@ -52,3 +52,21 @@
   the pipeline installs them; the fast CI job stays light.
 - Supabase's direct host is IPv6-only and GitHub runners have no IPv6, so the connection uses
   the session pooler URL.
+
+### Day 3-4 results on the real filings
+
+First pipeline run (2026-10-03): all 10 sections found and inside the sanity range.
+
+| Ticker | Words | Chunks | | Ticker | Words | Chunks |
+|---|---|---|---|---|---|---|
+| AAPL | 9,778 | 28 | | PFE | 12,683 | 37 |
+| MSFT | 11,708 | 34 | | XOM | 5,099 | 15 |
+| TSLA | 12,586 | 36 | | NKE | 14,413 | 42 |
+| JPM | 15,489 | 45 | | NFLX | 11,192 | 32 |
+| WMT | 13,541 | 39 | | DAL | 7,663 | 22 |
+
+Total: 330 chunks. Reading each section's first and last words in the log showed page
+furniture left at page breaks ("PART I", "Parts I and II", "2026 FORM 10-K 23",
+"Delta Air Lines, Inc. | 2025 Form 10-K") and DAL's heading sharing a line with its first
+sentence. Added tests with those exact strings, then filtered them out. Embedding worked;
+storing failed only because the `SUPABASE_DB_URL` secret was not set yet.

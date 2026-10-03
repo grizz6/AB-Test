@@ -56,8 +56,8 @@ requests write to a separate `ci` index in Supabase so they never touch `main`.
 |---|---|---|
 | 1 | Setup, CI (ruff, pytest, gitleaks), LLM smoke test | done |
 | 2 | Download 10 filings from SEC EDGAR (`src/download.py`, pipeline workflow) | done |
-| 3 | Parse "Item 1A. Risk Factors" + chunk + tests (`src/parse.py`, `src/chunk.py`) | in progress |
-| 4 | Embed + store in Supabase pgvector (`src/index.py`) | in progress |
+| 3 | Parse "Item 1A. Risk Factors" + chunk + tests (`src/parse.py`, `src/chunk.py`): 10/10 sections, 330 chunks | done |
+| 4 | Embed + store in Supabase pgvector (`src/index.py`) | waiting on `SUPABASE_DB_URL` |
 | 5 | Retrieve + answer with citations (v1.0) | |
 | 6 | 50-question test set | |
 | 7 | Evaluation + MLflow experiments | |
