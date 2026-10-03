@@ -66,10 +66,12 @@ jobs:
       - name: Embed and store in Supabase (index ${{ env.INDEX_NAME }})
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}  # optional: faster model download from Hugging Face
         run: python -m src.index --index-name "$INDEX_NAME"
       - name: Test search
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -m src.index --index-name "$INDEX_NAME" --query "supply chain risk" --ticker TSLA
           python -m src.index --index-name "$INDEX_NAME" --query "cybersecurity breach"
