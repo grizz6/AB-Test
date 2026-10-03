@@ -140,7 +140,9 @@ def build(index_name: str) -> int:
     chunks = load_chunks()
     model = load_embedder(cfg["embedding_model"])
     vectors = embed(model, [c["text"] for c in chunks])
-    dim = model.get_sentence_embedding_dimension()
+    # Renamed in newer sentence-transformers; support both.
+    get_dim = getattr(model, "get_embedding_dimension", None)
+    dim = get_dim() if get_dim else model.get_sentence_embedding_dimension()
     conn = connect(db_url())
     try:
         write_index(conn, rows_for_insert(chunks, vectors, index_name), index_name, dim)
