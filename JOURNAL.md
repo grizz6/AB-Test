@@ -28,3 +28,27 @@
   Added `cik_overrides` in config.yaml (XOM -> 34088, where the 10-Ks are).
 - Gemini answered 503 "high demand" once; the client now retries 429/500/503 with backoff
   (2, 4, 8 s) and fails fast on other errors.
+
+## Day 3: Parse + chunk
+
+- `src/parse.py`: HTML -> text (one line per block element; hidden inline-XBRL header and
+  `display:none` blocks dropped), then find Item 1A by heading lines only. The table of
+  contents and "see Item 1A" cross-references also match, so every start is paired with the
+  next end heading (Item 1B / 1C / 2 or "Unresolved Staff Comments") and the longest span
+  wins. Page numbers and "Table of Contents" running headers are removed.
+- Sanity check: a section under 1,500 or over 80,000 words fails the pipeline, which prints
+  each company's word count and first/last words so a wrong span is obvious in the log.
+- `src/chunk.py`: 400-word windows, 50-word overlap, IDs like `TSLA_1A_0012`; each chunk keeps
+  company, source URL and filing date for citations.
+
+## Day 4: Embed + store
+
+- `all-MiniLM-L6-v2` (384 dims) with normalized vectors, stored in Supabase Postgres with
+  pgvector, HNSW index on cosine distance.
+- Rows are keyed by `(index_name, id)`: re-indexing replaces one index in a single
+  transaction, PR runs write to `ci`, and later chunking experiments get their own index
+  instead of overwriting `main`.
+- PyTorch is large, so embedding deps live in `requirements-index.txt` (CPU wheels) and only
+  the pipeline installs them; the fast CI job stays light.
+- Supabase's direct host is IPv6-only and GitHub runners have no IPv6, so the connection uses
+  the session pooler URL.

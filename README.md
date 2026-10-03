@@ -7,7 +7,7 @@ A retrieval-augmented generation (RAG) system built as an MLOps project: tracked
 an evaluation test set, CI that blocks changes when retrieval quality drops, a containerized
 app, and monitoring. Runs entirely on free cloud services, with no credit card and no local LLM.
 
-> **Status:** Day 2 of 10 (download filings). See the roadmap below.
+> **Status:** Days 3–4 of 10 (parse, chunk, embed, store). See the roadmap below.
 
 ## Cloud stack (all free tiers)
 
@@ -40,16 +40,24 @@ cp .env.example .env        # fill in values; never commit .env
 ruff check . && pytest -q
 python -m src.llm "Say hi"   # needs GEMINI_API_KEY in .env
 python -m src.download       # needs SEC_USER_AGENT in .env; writes data/raw/
+python -m src.parse          # data/raw/ -> data/sections/<TICKER>.txt (Item 1A only)
+python -m src.chunk          # -> data/chunks.jsonl (400 words, 50 overlap, IDs like TSLA_1A_0012)
+pip install -r requirements-index.txt   # sentence-transformers (CPU PyTorch), psycopg, pgvector
+python -m src.index          # embed + store in Supabase; needs SUPABASE_DB_URL in .env
+python -m src.index --query "supply chain risk" --ticker TSLA
 ```
+
+In the cloud, `.github/workflows/pipeline.yml` runs all of these in GitHub Actions. Pull
+requests write to a separate `ci` index in Supabase so they never touch `main`.
 
 ## Roadmap
 
 | Day | What | Status |
 |---|---|---|
 | 1 | Setup, CI (ruff, pytest, gitleaks), LLM smoke test | done |
-| 2 | Download 10 filings from SEC EDGAR (`src/download.py`, pipeline workflow) | in progress |
-| 3 | Parse "Item 1A. Risk Factors" + chunk + tests | |
-| 4 | Embed + store in Supabase pgvector | |
+| 2 | Download 10 filings from SEC EDGAR (`src/download.py`, pipeline workflow) | done |
+| 3 | Parse "Item 1A. Risk Factors" + chunk + tests (`src/parse.py`, `src/chunk.py`) | in progress |
+| 4 | Embed + store in Supabase pgvector (`src/index.py`) | in progress |
 | 5 | Retrieve + answer with citations (v1.0) | |
 | 6 | 50-question test set | |
 | 7 | Evaluation + MLflow experiments | |

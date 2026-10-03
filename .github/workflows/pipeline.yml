@@ -1,19 +1,28 @@
 name: Data pipeline
 
-# Builds the data in the cloud. Day 2: download the latest 10-K for each company.
-# Later days add parse -> chunk -> embed steps here.
+# Builds the data in the cloud:
+#   download (SEC EDGAR) -> parse Item 1A -> chunk -> embed -> Supabase pgvector
+# Pull requests write to a separate "ci" index so they never touch the "main" index.
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - src/download.py
+      - src/parse.py
+      - src/chunk.py
+      - src/index.py
       - config.yaml
+      - requirements*.txt
       - .github/workflows/pipeline.yml
   push:
     branches: [main]
     paths:
       - src/download.py
+      - src/parse.py
+      - src/chunk.py
+      - src/index.py
       - config.yaml
+      - requirements*.txt
       - .github/workflows/pipeline.yml
 
 permissions:
@@ -23,8 +32,11 @@ concurrency:
   group: pipeline-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  INDEX_NAME: ${{ github.event_name == 'pull_request' && 'ci' || 'main' }}
+
 jobs:
-  download:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +45,8 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements*.txt
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-index.txt
+
       - name: Download 10-K filings from SEC EDGAR
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -44,8 +57,29 @@ jobs:
           found=$(ls data/raw/*.htm | wc -l)
           echo "expected=$expected found=$found"
           test "$found" -eq "$expected"
+
+      - name: Extract Item 1A. Risk Factors
+        run: python -m src.parse
+      - name: Chunk sections
+        run: python -m src.chunk
+
+      - name: Embed and store in Supabase (index ${{ env.INDEX_NAME }})
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python -m src.index --index-name "$INDEX_NAME"
+      - name: Test search
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          python -m src.index --index-name "$INDEX_NAME" --query "supply chain risk" --ticker TSLA
+          python -m src.index --index-name "$INDEX_NAME" --query "cybersecurity breach"
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: raw-filings
-          path: data/raw/
+          name: pipeline-data
+          path: |
+            data/raw/
+            data/sections/
+            data/chunks.jsonl
           retention-days: 30
